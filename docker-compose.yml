@@ -1,0 +1,240 @@
+# Copy this file to the parent folder and clone the coresponding folders with "git clone https://github.com/Coflnet/_______.git"
+# also make sure to rename this folder to "dev" (historical name)
+version: '3.7'
+services:
+  mariadb:
+    image: 'docker.io/bitnami/mariadb:10.11-debian-11'
+    volumes:
+      - 'skyblockdb_data:/bitnami/mariadb'
+    ports:
+      - '3306:3306'
+    environment:
+      - MARIADB_ROOT_PASSWORD=takenfrombitnami
+      - MARIADB_EXTRA_FLAGS=--innodb-buffer-pool-size=500M --key-buffer-size=1G --connect-timeout=101
+  phpmyadmin:
+    image: 'docker.io/bitnami/phpmyadmin:5-debian-10'
+    ports:
+      - '8038:8080'
+      - '4438:8443'
+    depends_on:
+      - mariadb
+  indexer:
+    build: SkyIndexer
+    ports:
+    - '8007:8008'
+    restart: always
+    depends_on:
+      - mariadb
+      - kafka
+      - redis
+      - items
+    environment: 
+      FRONTEND_PROD: "frontend"
+      JAEGER_SERVICE_NAME: "hypixel-skyblock-core"
+      JAEGER_AGENT_HOST: "jaeger"
+      KAFKA_HOST: "kafka:9092"
+      SKYCOMMANDS_HOST: "commands:8008"
+  api:
+    build: SkyApi
+    restart: always 
+    ports:
+    - '1234:8000'
+    environment:
+      ITEMS_BASE_URL: http://items:8000
+      DBCONNECTION: server=mariadb;database=test;user=root;password=takenfrombitnami; convert zero datetime=True;Charset=utf8; Connect Timeout=30
+  commands:
+    build: SkyCommands
+    environment: 
+      - JAEGER_AGENT_HOST=jaeger
+      - KAFKA_HOST=kafka:9092
+    ports:
+    - "8008:8008"
+    restart: always
+    depends_on:
+      - mariadb
+      - kafka
+      - redis
+      - frontend
+  redis:
+    image: "redis:alpine"
+    environment:
+      - REDIS_REPLICATION_MODE=master
+    ports:
+      - "6379:6379"
+  imgproxy:
+    image: darthsim/imgproxy
+    environment:
+      - IMGPROXY_ALLOWED_SOURCES=https://sky.shiiyu.moe/,https://skycrypt.coflnet.com,https://mc-heads.net/,https://crafatar.com/,https://static.coflnet.com/
+      - IMGPROXY_BIND=:80
+      - IMGPROXY_MAX_ANIMATION_FRAMES=100
+    ports:
+      - 8234:80
+  frontend:
+    build: hypixel-react
+    ports:
+      - "3000:3000"
+  jaeger:
+    image: "jaegertracing/all-in-one:1.35"
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+      - "14250:14250"
+      - "5775:5775"
+      - "6831:6831"
+      - "6832:6832"
+      - "5778:5778"
+      - "14269:14269"
+      - "9411:9411"
+    environment:
+      - COLLECTOR_ZIPKIN_HOST_PORT=:9411
+  zookeeper:
+    image: docker.io/bitnami/zookeeper:3.7
+    ports:
+      - "2181:2181"
+    volumes:
+      - "zookeeper_data:/bitnami"
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+  kafka:
+    image: docker.io/bitnami/kafka:2
+    ports:
+      - "9092:9092"
+    volumes:
+      - "kafka_data:/bitnami"
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    depends_on:
+      - zookeeper
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 1500M
+  mcconnect:
+    build: SkyMcConnect
+  modcommands:
+    build: SkyModCommands
+    environment: 
+      - JAEGER_AGENT_HOST=jaeger
+      - KAFKA_HOST=kafka:9092
+      - DBConnection=server=mariadb;database=test;user=read;password=read; convert zero datetime=True;Charset=utf8; Connect Timeout=30; SslMode=none
+      - CASSANDRA__HOSTS=scylla
+    ports:
+    - "8009:8008"
+    restart: always
+    depends_on:
+     - commands
+     - mcconnect
+     - fliptracker
+     - kafka
+     - items
+     - scylla
+  items:
+    build: SkyItems
+    restart: always 
+    ports:
+     - '5014:8000'
+  fliptracker:
+    build: SkyFlipTracker
+    restart: always 
+    environment:
+      - CASSANDRA__HOSTS=scylla
+    ports:
+      - "5017:8000"
+    depends_on:
+      - scylla
+      - kafka
+      - crafts
+  crafts:
+    build: SkyCrafts
+  profile:
+    build: SkyPlayerInfo
+    ports:
+      - "8087:8000"
+  sniper:
+    build: SkySniper
+    restart: always 
+    ports:
+      - "8086:8000"
+    depends_on:
+      - minio
+  subscription:
+    build: SkySubscriptions
+  updater:
+    build: SkyUpdater
+    depends_on:
+      - jaeger
+    environment: 
+      SLOWDOWN_MS: 800
+  flipper:
+    build: SkyFlipper
+    environment:
+      - ITEMS_BASE_URL=http://items:8000
+  payment:
+    build: Payments
+    depends_on:
+      - mariadb
+    ports:
+      - "8089:80"
+  settings:
+    build: SkySettings
+    restart: always 
+    depends_on:
+      - scylla
+    ports:
+     - '5004:8000'
+    environment:
+      - CASSANDRA__HOSTS=scylla
+  bazaar:
+    build: SkyBazaar
+    restart: always 
+    ports:
+    - '5011:8000'
+    environment:
+      CASSANDRA__HOSTS: scylla
+  scylla:
+    image: scylladb/scylla
+    container_name: some-scylla
+    volumes:
+      - 'scylla_data:/var/lib/scylla'
+    ports:
+      - '7000:7000'
+      - '9042:9042'
+    command: --smp 1
+  mongo:
+    image: bitnami/mongodb
+    environment:
+      - MONGODB_USERNAME=my_user
+      - MONGODB_PASSWORD=password123
+      - MONGODB_ROOT_PASSWORD=password123
+      - MONGODB_DATABASE=my_database
+    volumes:
+      - 'mongodb_data:/bitnami'
+    ports:
+      - '27017:27017'
+  minio:
+    image: minio/minio
+    command: server --console-address ":9001" /data
+    depends_on:
+      - "kafka"
+    expose:
+      - 9000
+      - 9001
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+volumes:
+  zookeeper_data:
+    driver: local
+  kafka_data:
+    driver: local
+  skyblockdb_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  scylla_data:
+    driver: local

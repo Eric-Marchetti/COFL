@@ -1,0 +1,59 @@
+<script>
+    var ws;
+    var last = {};
+
+    function connect() {
+        //ws = new WebSocket("wss://skyblock-backend.coflnet.com/skyblock?id=testVerbindung");
+        //ws = new WebSocket("wss://sky-commands.coflnet.com/skyblock?id=aaaaaaaaaaaaaaaaaaaaaaaaaa");
+        //ws = new WebSocket("wss://sky-commands.coflnet.com/modsocket?sid=nicer&version=1.2-Alpha&uuid=ekwav");
+        //ws = new WebSocket("ws://localhost:8008/skyblock?id=nicede");
+        ws = new WebSocket("ws://sky-mod.coflnet.com/modsocket?sid=niced&version=1.2-Alpha&uuid=ekwav");
+        //ws = new WebSocket("ws://localhost:8009/modsocket?sid=nidxcefdks&version=1.2-Alpha&uuid=ekwav");
+
+
+        ws.onmessage = function (evt) {
+            var received_msg = JSON.parse(evt.data);
+
+            last = JSON.parse(received_msg.data);
+            if (received_msg.type == "itemDetailsResponse") {
+                console.log(JSON.parse(received_msg.data).IconUrl)
+            } else if(received_msg.type == "chatMessage") {
+                var msg = "";
+                last.forEach(el=>{msg+=el.text});
+                console.log(msg + last[0].onClick);
+            } else {
+                
+            console.log(last)
+            }
+        };
+
+        ws.onclose = (event)=>{
+            setTimeout(()=>connect(),1000);
+        }
+    }
+    connect();
+
+    function send(type, data) {
+        ws.send(JSON.stringify({
+            type: type,
+            data: btoa(data),
+            mId: new Date().getMilliseconds()
+        }));
+    }
+
+        function sendMod(type, data) {
+        ws.send(JSON.stringify({
+            type: type,
+            data: JSON.stringify(data)
+        }));
+    }
+
+    function sendData(type, data) {
+        send(type, JSON.stringify(data));
+    }
+</script>
+<p>
+    Delete from UuId;
+    Delete from BuyOrder;
+    Delete from SellOrder;
+</p>
